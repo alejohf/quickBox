@@ -16,6 +16,7 @@ interface QuizScreenProps {
   totalQuestions: number;
   onQuestionComplete: (answer: UserAnswer) => void;
   speechSettings: SpeechSettings;
+  onExit: () => void;
 }
 
 const QUIZ_DURATION = 40; // 40 seconds
@@ -28,7 +29,7 @@ const COUNTDOWN_BEEP_AUDIO_URL = 'https://storage.googleapis.com/gemini-web-work
 const FLATLINE_AUDIO_URL = 'https://storage.googleapis.com/gemini-web-workshop-assets/flatline.mp3';
 
 
-const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, totalQuestions, onQuestionComplete, speechSettings }) => {
+const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, totalQuestions, onQuestionComplete, speechSettings, onExit }) => {
   const [timeLeft, setTimeLeft] = useState(QUIZ_DURATION);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [userAnswer, setUserAnswer] = useState<Alternative | null>(null);
@@ -264,6 +265,12 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
       <header className="w-full flex justify-between items-center mb-4">
         <div className="text-xl font-bold">{questionNumber} / {totalQuestions}</div>
         <Timer timeLeft={timeLeft} duration={QUIZ_DURATION} />
+        <button
+          onClick={onExit}
+          className="bg-slate-700 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-all transform hover:scale-105 text-sm"
+        >
+          Cerrar Examen
+        </button>
       </header>
 
       <div className="flex-grow flex flex-col items-center justify-center w-full">

@@ -79,6 +79,7 @@ const App: React.FC = () => {
             totalQuestions={questions.length}
             onQuestionComplete={handleNextQuestion}
             speechSettings={speechSettings}
+            onExit={handleRestart}
           />
         );
       case GameState.Results:
