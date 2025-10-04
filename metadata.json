@@ -1,0 +1,7 @@
+{
+  "name": "QuizVox AI",
+  "description": "An interactive web application that allows users to answer exam-style questions through voice interaction, guided by a voice assistant. It features question loading from text files, timed responses, and immediate feedback.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
