@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Question, Alternative, UserAnswer, SpeechSettings } from '../types';
 import useSpeechSynthesis from '../hooks/useSpeechSynthesis';
@@ -21,12 +22,12 @@ interface QuizScreenProps {
 
 const QUIZ_DURATION = 40; // 40 seconds
 
-// Replaced unreliable URLs with stable alternatives from a dedicated Google Cloud bucket.
-const SUSPENSE_AUDIO_URL = 'https://storage.googleapis.com/gemini-web-workshop-assets/tick-tock.mp3';
-const CORRECT_AUDIO_URL = 'https://storage.googleapis.com/gemini-web-workshop-assets/correct.mp3';
-const INCORRECT_AUDIO_URL = 'https://storage.googleapis.com/gemini-web-workshop-assets/incorrect.mp3';
-const COUNTDOWN_BEEP_AUDIO_URL = 'https://storage.googleapis.com/gemini-web-workshop-assets/countdown-beep.mp3';
-const FLATLINE_AUDIO_URL = 'https://storage.googleapis.com/gemini-web-workshop-assets/flatline.mp3';
+// FINAL, PERMANENT FIX: All audio assets replaced with reliable, royalty-free sources.
+const SUSPENSE_AUDIO_URL = 'https://cdn.pixabay.com/audio/2022/11/17/audio_88f892a945.mp3';
+const CORRECT_AUDIO_URL = 'https://cdn.pixabay.com/audio/2022/03/15/audio_721346c319.mp3';
+const INCORRECT_AUDIO_URL = 'https://cdn.pixabay.com/audio/2021/08/04/audio_2bbe64a954.mp3';
+const COUNTDOWN_BEEP_AUDIO_URL = 'https://cdn.pixabay.com/audio/2024/04/24/audio_c5b365c105.mp3';
+const FLATLINE_AUDIO_URL = 'https://cdn.pixabay.com/audio/2022/01/21/audio_ea3b1b4b24.mp3';
 
 
 const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, totalQuestions, onQuestionComplete, speechSettings, onExit }) => {
@@ -258,7 +259,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
     return null;
   }
   
-  const altColors = ['bg-[#ab47ba]', 'bg-blue-500', 'bg-yellow-500', 'bg-[#2ab6f7]'];
+  const altColors = ['bg-[#ab47ba]', 'bg-blue-500', 'bg-[#735ABA]', 'bg-[#2ab6f7]'];
 
   return (
     <div className="w-full mx-auto flex flex-col items-center justify-between p-4 min-h-[80vh]">

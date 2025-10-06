@@ -10,17 +10,7 @@ interface WelcomeScreenProps {
   setSpeechSettings: React.Dispatch<React.SetStateAction<SpeechSettings>>;
 }
 
-const LEVEL_SIZE = 5;
-
-// Helper function to shuffle an array (Fisher-Yates algorithm)
-function shuffleArray<T>(array: T[]): T[] {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-  }
-  return newArray;
-}
+const LEVEL_SIZE = 30;
 
 // Helper function to chunk an array into smaller arrays
 function chunkArray<T>(array: T[], size: number): T[][] {
@@ -47,18 +37,25 @@ export default function WelcomeScreen({ onQuizStart, voices, speechSettings, set
       setError('');
       const reader = new FileReader();
       reader.onload = (e) => {
-        const text = e.target?.result as string;
-        try {
-          const parsedQuestions = parseQuizText(text);
-          if (parsedQuestions.length === 0) {
-            setError('The file could not be processed. Ensure it is a valid .txt quiz file.');
+        const text = e.target?.result;
+        if (typeof text === 'string' && text.length > 0) {
+            try {
+                const parsedQuestions = parseQuizText(text);
+                if (parsedQuestions.length === 0) {
+                    setError('El archivo no pudo ser procesado. Asegúrate de que el formato es correcto y contiene preguntas.');
+                    setQuestionsFromFile([]);
+                } else {
+                    setQuestionsFromFile(parsedQuestions);
+                    setError(''); // Clear previous errors on success
+                }
+            } catch (err) {
+                console.error("Error al analizar el archivo:", err);
+                setError('Ocurrió un error al analizar el archivo. Comprueba la estructura del contenido.');
+                setQuestionsFromFile([]);
+            }
+        } else {
+            setError('No se pudo leer el contenido del archivo. Intenta guardarlo con codificación UTF-8.');
             setQuestionsFromFile([]);
-          } else {
-            setQuestionsFromFile(parsedQuestions);
-          }
-        } catch (err) {
-          setError('An error occurred while parsing the file.');
-          setQuestionsFromFile([]);
         }
       };
       reader.readAsText(file);
@@ -68,10 +65,17 @@ export default function WelcomeScreen({ onQuizStart, voices, speechSettings, set
   const handleLoadDefaultQuiz = useCallback(() => {
     // 1. Parse the default quiz text
     const parsed = parseQuizText(defaultQuizText);
-    // 2. Shuffle the questions to make levels random each time
-    const shuffled = shuffleArray(parsed);
-    // 3. Chunk the shuffled questions into levels
-    const chunked = chunkArray(shuffled, LEVEL_SIZE);
+    
+    // 2. Chunk the questions into levels
+    let chunked = chunkArray(parsed, LEVEL_SIZE);
+
+    // 3. Add the "Pregunta X." prefix to each question within its level
+    chunked = chunked.map(level => 
+      level.map((question, index) => ({
+        ...question,
+        questionText: `Pregunta ${index + 1}. ${question.questionText}`
+      }))
+    );
     
     setLevels(chunked);
 
@@ -93,7 +97,7 @@ export default function WelcomeScreen({ onQuizStart, voices, speechSettings, set
           Select File
         </label>
         <input id="file-upload" type="file" accept=".txt" className="hidden" onChange={handleFileChange} />
-        {fileName && <p className="mt-4 text-green-400">File loaded: {fileName} ({questionsFromFile.length} questions found)</p>}
+        {fileName && !error && <p className="mt-4 text-green-400">File loaded: {fileName} ({questionsFromFile.length} questions found)</p>}
         {error && <p className="mt-4 text-red-400">{error}</p>}
       </div>
 
@@ -145,7 +149,7 @@ export default function WelcomeScreen({ onQuizStart, voices, speechSettings, set
 
   return (
     <div className="text-center bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-2xl mx-auto flex flex-col items-center animate-fade-in">
-      <h1 className="text-5xl font-bold text-cyan-400 mb-2">QuizVox AI</h1>
+      <h1 className="text-5xl font-bold text-cyan-400 mb-2">Trivia F3r</h1>
       <p className="text-xl text-slate-300 mb-8">Your Interactive Voice-Powered Quiz Moderator</p>
       
       {levels.length > 0 ? renderLevelSelectionView() : renderFileUploadView()}

@@ -5,15 +5,21 @@ export const parseQuizText = (text: string): Question[] => {
   const questions: Question[] = [];
   const questionBlocks = text.trim().split(/\n\s*\n/);
 
-  questionBlocks.forEach((block, index) => {
+  questionBlocks.forEach((block) => {
     const lines = block.trim().split('\n');
     if (lines.length < 2) return;
 
-    const questionText = lines[0].replace(/^Pregunta \d+\.\s*/, '').trim();
+    const firstAlternativeIndex = lines.findIndex(line => /^\s*[a-zA-Z]\)\s*/.test(line));
+
+    if (firstAlternativeIndex === -1) return; // No alternatives found
+
+    const questionText = lines.slice(0, firstAlternativeIndex).join(' ').replace(/^\d+\.\s*/, '').trim();
+    const alternativeLines = lines.slice(firstAlternativeIndex);
+
     const alternatives: Alternative[] = [];
     let correctAnswerKey = '';
 
-    lines.slice(1).forEach(line => {
+    alternativeLines.forEach(line => {
       const match = line.match(/^\s*([a-zA-Z])\)\s*(.*)/);
       if (match) {
         const key = match[1].toLowerCase();
