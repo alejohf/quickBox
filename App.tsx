@@ -53,14 +53,35 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleNextQuestion = useCallback((answer: UserAnswer) => {
-    setUserAnswers(prev => [...prev, answer]);
+  const handleAnswerSubmit = useCallback((answer: UserAnswer) => {
+    setUserAnswers(prevAnswers => {
+        const newAnswers = [...prevAnswers];
+        const existingAnswerIndex = newAnswers.findIndex(a => a.question === answer.question);
+
+        if (existingAnswerIndex !== -1) {
+            // Replace existing answer if user changes it
+            newAnswers[existingAnswerIndex] = answer;
+        } else {
+            // Add new answer
+            newAnswers.push(answer);
+        }
+        return newAnswers;
+    });
+  }, []);
+
+  const handleGoToNext = useCallback(() => {
     if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
+        setCurrentQuestionIndex(prev => prev + 1);
     } else {
-      setGameState(GameState.Results);
+        setGameState(GameState.Results);
     }
   }, [currentQuestionIndex, questions.length]);
+
+  const handleGoToPrevious = useCallback(() => {
+      if (currentQuestionIndex > 0) {
+          setCurrentQuestionIndex(prev => prev - 1);
+      }
+  }, [currentQuestionIndex]);
   
   const handleRestart = useCallback(() => {
     setQuestions([]);
@@ -74,10 +95,14 @@ const App: React.FC = () => {
       case GameState.Playing:
         return (
           <QuizScreen
+            key={currentQuestionIndex}
             question={questions[currentQuestionIndex]}
             questionNumber={currentQuestionIndex + 1}
             totalQuestions={questions.length}
-            onQuestionComplete={handleNextQuestion}
+            onAnswerSubmit={handleAnswerSubmit}
+            onGoToNext={handleGoToNext}
+            onGoToPrevious={handleGoToPrevious}
+            userAnswers={userAnswers}
             speechSettings={speechSettings}
             onExit={handleRestart}
           />

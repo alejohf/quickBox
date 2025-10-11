@@ -1,40 +1,57 @@
-
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Question, Alternative, UserAnswer, SpeechSettings } from '../types';
 import useSpeechSynthesis from '../hooks/useSpeechSynthesis';
 import useSpeechRecognition from '../hooks/useSpeechRecognition';
-import Timer from './Timer';
 import { MicrophoneIcon } from './icons/MicrophoneIcon';
 import { CheckIcon } from './icons/CheckIcon';
 import { XIcon } from './icons/XIcon';
 import { MicrophoneOffIcon } from './icons/MicrophoneOffIcon';
 import { ChevronUpIcon } from './icons/ChevronUpIcon';
+import Timer from './Timer';
 
 interface QuizScreenProps {
   question: Question;
   questionNumber: number;
   totalQuestions: number;
-  onQuestionComplete: (answer: UserAnswer) => void;
+  onAnswerSubmit: (answer: UserAnswer) => void;
+  onGoToNext: () => void;
+  onGoToPrevious: () => void;
+  userAnswers: UserAnswer[];
   speechSettings: SpeechSettings;
   onExit: () => void;
 }
 
-const QUIZ_DURATION = 40; // 40 seconds
+const QUIZ_DURATION = 40;
 
-// FINAL, PERMANENT FIX: All audio assets replaced with reliable, royalty-free sources.
+// Audio assets for the timer functionality
 const SUSPENSE_AUDIO_URL = 'https://cdn.pixabay.com/audio/2022/11/17/audio_88f892a945.mp3';
-const CORRECT_AUDIO_URL = 'https://cdn.pixabay.com/audio/2022/03/15/audio_721346c319.mp3';
-const INCORRECT_AUDIO_URL = 'https://cdn.pixabay.com/audio/2021/08/04/audio_2bbe64a954.mp3';
 const COUNTDOWN_BEEP_AUDIO_URL = 'https://cdn.pixabay.com/audio/2024/04/24/audio_c5b365c105.mp3';
 const FLATLINE_AUDIO_URL = 'https://cdn.pixabay.com/audio/2022/01/21/audio_ea3b1b4b24.mp3';
 
+// Audio assets for feedback
+const CORRECT_AUDIO_URL = 'https://cdn.pixabay.com/audio/2022/03/15/audio_721346c319.mp3';
+const INCORRECT_AUDIO_URL = 'https://cdn.pixabay.com/audio/2021/08/04/audio_2bbe64a954.mp3';
 
-const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, totalQuestions, onQuestionComplete, speechSettings, onExit }) => {
+const QuizScreen: React.FC<QuizScreenProps> = ({ 
+  question, 
+  questionNumber, 
+  totalQuestions, 
+  onAnswerSubmit,
+  onGoToNext,
+  onGoToPrevious,
+  userAnswers,
+  speechSettings, 
+  onExit 
+}) => {
+  const existingAnswerObject = userAnswers.find(ua => ua.question === question.questionText);
+  const isAlreadyAnswered = !!existingAnswerObject;
+  const initialSelection = existingAnswerObject
+      ? question.alternatives.find(alt => alt.text === existingAnswerObject.answer) || null
+      : null;
+      
+  const [userSelection, setUserSelection] = useState<Alternative | null>(initialSelection);
   const [timeLeft, setTimeLeft] = useState(QUIZ_DURATION);
   const [isTimerActive, setIsTimerActive] = useState(false);
-  const [userAnswer, setUserAnswer] = useState<Alternative | null>(null);
-  const [isAnswered, setIsAnswered] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [recognitionError, setRecognitionError] = useState('');
   
@@ -45,20 +62,18 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
   const incorrectAudioRef = useRef<HTMLAudioElement | null>(null);
   const countdownBeepAudioRef = useRef<HTMLAudioElement | null>(null);
   const flatlineAudioRef = useRef<HTMLAudioElement | null>(null);
-  
-  // Use a ref to check the answered state inside setTimeout to get the latest value.
-  const isAnsweredRef = useRef(isAnswered);
-  useEffect(() => {
-    isAnsweredRef.current = isAnswered;
-  }, [isAnswered]);
 
+  // Use a ref to avoid stale closures in callbacks
+  const isAnsweredRef = useRef(isAlreadyAnswered);
+  useEffect(() => {
+    isAnsweredRef.current = isAlreadyAnswered;
+  }, [isAlreadyAnswered]);
 
   useEffect(() => {
     const createAudio = (src: string, loop = false) => {
       const audio = new Audio(src);
       audio.loop = loop;
-      audio.preload = 'auto'; // Set preload property for better loading behavior
-      // Add an error listener for better debugging
+      audio.preload = 'auto';
       audio.addEventListener('error', () => {
         console.error(`Failed to load audio source: ${src}`);
       });
@@ -72,28 +87,23 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
     flatlineAudioRef.current = createAudio(FLATLINE_AUDIO_URL);
   }, []);
 
+  const stopAllTimerAudio = () => {
+    suspenseAudioRef.current?.pause();
+    countdownBeepAudioRef.current?.pause();
+    if (suspenseAudioRef.current) suspenseAudioRef.current.currentTime = 0;
+    if (countdownBeepAudioRef.current) countdownBeepAudioRef.current.currentTime = 0;
+  };
 
-  const processAnswer = useCallback((answeredAlternative: Alternative | null, timedOut: boolean = false) => {
+  const processAnswer = useCallback((selectedAlternative: Alternative | null, timedOut = false) => {
     if (isAnsweredRef.current) return;
 
     setIsTimerActive(false);
-    setIsAnswered(true);
     cancelSpeech();
-    
-    if(suspenseAudioRef.current) {
-      suspenseAudioRef.current.pause();
-      suspenseAudioRef.current.currentTime = 0;
-    }
-    
-    if (countdownBeepAudioRef.current) {
-      countdownBeepAudioRef.current.pause();
-      countdownBeepAudioRef.current.currentTime = 0;
-    }
+    stopAllTimerAudio();
+    setUserSelection(selectedAlternative);
 
-    const isCorrect = answeredAlternative?.isCorrect ?? false;
+    const isCorrect = selectedAlternative?.isCorrect ?? false;
     const correctAnswer = question.alternatives.find(alt => alt.isCorrect);
-
-    setUserAnswer(answeredAlternative);
     
     let feedbackText = '';
     let feedbackAudio: HTMLAudioElement | null = null;
@@ -114,18 +124,16 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
       feedbackAudio.play().catch(e => console.error("Feedback audio play failed:", e));
     }
 
-    speak(feedbackText, () => {
-        setTimeout(() => {
-            onQuestionComplete({
-                question: question.questionText,
-                answer: answeredAlternative?.text ?? 'No answer',
-                correctAnswer: correctAnswer?.text ?? '',
-                isCorrect: isCorrect,
-            });
-        }, 1500);
-    }, speechSettings);
+    speak(feedbackText, undefined, speechSettings);
+    
+    onAnswerSubmit({
+        question: question.questionText,
+        answer: selectedAlternative?.text ?? 'No respondida',
+        correctAnswer: correctAnswer?.text ?? '',
+        isCorrect: isCorrect,
+    });
 
-  }, [onQuestionComplete, question, speak, cancelSpeech, speechSettings]);
+  }, [onAnswerSubmit, question, speak, cancelSpeech, speechSettings]);
 
   const handleRecognitionResult = useCallback((recognizedText: string) => {
     setRecognitionError('');
@@ -153,7 +161,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
   
   const handleAlternativeClick = (alt: Alternative) => {
     if (isAnsweredRef.current || isSpeaking) return;
-    processAnswer(alt);
+    processAnswer(alt, false);
   };
 
   const { isListening, stopListening, isAvailable } = useSpeechRecognition({
@@ -172,90 +180,79 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
   });
 
   useEffect(() => {
-    setTimeLeft(QUIZ_DURATION);
-    setIsAnswered(false);
-    setUserAnswer(null);
     setTranscript('');
     setRecognitionError('');
-    
-    const speakQuestion = async () => {
-      await new Promise(resolve => speak(question.questionText, () => resolve(true), speechSettings));
-      if (isAnsweredRef.current) return;
-      
-      for (const alt of question.alternatives) {
-        await new Promise(resolve => speak(`${alt.key}) ${alt.text}`, () => resolve(true), speechSettings));
-        if (isAnsweredRef.current) return;
-      }
+    setTimeLeft(QUIZ_DURATION);
+    setIsTimerActive(false);
 
-      speak("Tu tiempo empieza ahora.", () => {
-        if (!isAnsweredRef.current) {
-          setIsTimerActive(true);
-          if (suspenseAudioRef.current) {
-              suspenseAudioRef.current.play().catch(e => console.error("Suspense audio play failed:", e));
+    // Only speak the question and start timer if it hasn't been answered yet
+    if (!isAlreadyAnswered) {
+        const speakQuestion = async () => {
+          await new Promise(resolve => speak(question.questionText, () => resolve(true), speechSettings));
+          if (isAnsweredRef.current) return;
+          
+          for (const alt of question.alternatives) {
+            await new Promise(resolve => speak(`${alt.key}) ${alt.text}`, () => resolve(true), speechSettings));
+            if (isAnsweredRef.current) return;
           }
-        }
-      }, speechSettings);
-    };
-    speakQuestion();
+          
+          speak("Tu tiempo empieza ahora.", () => {
+              if (!isAnsweredRef.current) {
+                setIsTimerActive(true);
+                suspenseAudioRef.current?.play().catch(e => console.error("Suspense audio play failed:", e));
+              }
+          }, speechSettings);
+        };
+        speakQuestion();
+    }
 
     return () => {
       cancelSpeech();
-      if (suspenseAudioRef.current) {
-        suspenseAudioRef.current.pause();
-      }
       stopListening();
+      stopAllTimerAudio();
     };
-  }, [question, speak, cancelSpeech, stopListening, speechSettings]);
+  }, [question]);
 
   useEffect(() => {
     if (!isTimerActive) return;
 
     if (timeLeft === 0) {
-      if (isListening) {
-        stopListening();
-      }
+      if (isListening) stopListening();
       processAnswer(null, true);
       return;
     }
 
     const timerId = setInterval(() => {
       setTimeLeft(prev => {
-        const newTimeLeft = prev - 1;
-
-        if (newTimeLeft <= 5 && newTimeLeft > 0) {
-          if (suspenseAudioRef.current && !suspenseAudioRef.current.paused) {
-            suspenseAudioRef.current.pause();
+          const newTimeLeft = prev - 1;
+          if (newTimeLeft <= 5 && newTimeLeft > 0) {
+              if (suspenseAudioRef.current && !suspenseAudioRef.current.paused) {
+                  suspenseAudioRef.current.pause();
+              }
+              if (countdownBeepAudioRef.current) {
+                  countdownBeepAudioRef.current.currentTime = 0;
+                  countdownBeepAudioRef.current.play().catch(e => console.error("Countdown beep play failed:", e));
+              }
           }
-          if (countdownBeepAudioRef.current) {
-            countdownBeepAudioRef.current.currentTime = 0;
-            countdownBeepAudioRef.current.play().catch(e => console.error("Countdown beep play failed:", e));
-          }
-        }
-        else if (newTimeLeft > 5) {
-          if (suspenseAudioRef.current) {
-            const progress = (QUIZ_DURATION - newTimeLeft) / QUIZ_DURATION;
-            suspenseAudioRef.current.volume = Math.min(0.3 + progress * 0.7, 1);
-          }
-        }
-        
-        return newTimeLeft;
+          return newTimeLeft;
       });
     }, 1000);
 
     return () => clearInterval(timerId);
   }, [isTimerActive, timeLeft, processAnswer, isListening, stopListening]);
 
+
   const getAlternativeBgColor = (alt: Alternative) => {
-    if (!isAnswered) return 'bg-slate-700 hover:bg-slate-600';
+    if (!isAlreadyAnswered) return 'bg-slate-700 hover:bg-slate-600';
     if (alt.isCorrect) return 'bg-green-600';
-    if (userAnswer?.key === alt.key && !alt.isCorrect) return 'bg-red-600';
+    if (userSelection?.key === alt.key && !alt.isCorrect) return 'bg-red-600';
     return 'bg-slate-800 opacity-50';
   };
 
   const getAlternativeIcon = (alt: Alternative) => {
-    if (!isAnswered) return null;
+    if (!isAlreadyAnswered) return null;
     if (alt.isCorrect) return <CheckIcon />;
-    if (userAnswer?.key === alt.key && !alt.isCorrect) return <XIcon />;
+    if (userSelection?.key === alt.key && !alt.isCorrect) return <XIcon />;
     return null;
   }
   
@@ -279,23 +276,22 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
         
         <div className="grid grid-cols-1 gap-4 w-full max-w-3xl">
           {question.alternatives.map((alt, index) => {
-            const isInteractive = !isAnswered && !isSpeaking;
+            const isInteractive = !isAlreadyAnswered && !isSpeaking;
             return (
               <div 
                 key={alt.key} 
                 onClick={() => handleAlternativeClick(alt)}
                 className={`p-4 rounded-lg text-lg text-white transition-all duration-300 transform flex items-center justify-between
-                  ${isAnswered 
-                    ? getAlternativeBgColor(alt) + ' cursor-not-allowed' 
+                  ${isAlreadyAnswered
+                    ? getAlternativeBgColor(alt) + ' cursor-default' 
                     : isInteractive
                       ? `${altColors[index % 4]} hover:scale-105 cursor-pointer`
                       : `${altColors[index % 4]} opacity-60 cursor-not-allowed`
                   }`}
               >
                 <div className="flex items-center flex-1 min-w-0">
-                  {/* Custom Checkbox */}
                   <div className="flex-shrink-0 h-6 w-6 border-2 rounded-md mr-4 flex items-center justify-center transition-colors bg-white/20 border-slate-400">
-                    {userAnswer?.key === alt.key && (
+                    {userSelection?.key === alt.key && (
                       <div className="h-4 w-4 bg-cyan-400 rounded-sm"></div>
                     )}
                   </div>
@@ -313,14 +309,13 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
       
       <footer className="w-full flex flex-col items-center justify-center mt-10">
         <p className="min-h-[2rem] text-lg mb-4 text-slate-300 italic text-center">
-            {isSpeaking ? 'El moderador está hablando...' : ''}
+            {isSpeaking ? 'El moderador está hablando...' : transcript}
         </p>
         
         <div
-          className="inline-flex items-stretch rounded-full shadow-xl opacity-50 cursor-not-allowed"
+          className="inline-flex items-stretch rounded-full shadow-xl opacity-50 cursor-not-allowed mb-8"
           title="El reconocimiento de voz está temporalmente deshabilitado"
         >
-          {/* Main Mic Button */}
           <button
             disabled={true}
             className="relative flex items-center justify-center p-4 rounded-l-full bg-slate-700"
@@ -329,10 +324,8 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
             <MicrophoneOffIcon />
           </button>
           
-          {/* Divider */}
           <div className="w-px self-stretch bg-slate-600"></div>
 
-          {/* Settings Button */}
           <button
             disabled={true}
             className="flex items-center justify-center p-4 rounded-r-full text-white bg-slate-700"
@@ -341,10 +334,23 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ question, questionNumber, total
             <ChevronUpIcon />
           </button>
         </div>
-
-        <p className="mt-4 text-slate-400">
-          El reconocimiento de voz está temporalmente deshabilitado.
-        </p>
+        
+        <div className="flex justify-between w-full max-w-3xl">
+            <button 
+                onClick={onGoToPrevious} 
+                disabled={questionNumber === 1}
+                className="bg-slate-600 hover:bg-slate-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-lg transition-all"
+            >
+                Anterior
+            </button>
+            <button
+                onClick={onGoToNext}
+                disabled={!isAlreadyAnswered}
+                className="bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-900 font-bold py-3 px-8 rounded-lg transition-all"
+            >
+                {questionNumber === totalQuestions ? 'Finalizar Examen' : 'Siguiente'}
+            </button>
+        </div>
       </footer>
     </div>
   );
